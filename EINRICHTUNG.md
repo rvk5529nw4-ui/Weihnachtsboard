@@ -9,11 +9,14 @@ Beides ist kostenlos. Einmal einrichten dauert etwa 15 Minuten.
 1. Öffne <https://console.firebase.google.com> und melde dich mit deinem Google-Konto an.
 2. **Projekt erstellen** (oder „Firebase-Projekt erstellen“). Als Name zum Beispiel `weihnachtsboard`.
    Google Analytics brauchst du nicht: ausschalten und **Projekt erstellen**.
-3. Im linken Menü **Build > Firestore Database** (manchmal unter „Datenbanken und Speicher“) öffnen, dann **Datenbank erstellen**.
+3. Im linken Menü **Firestore** öffnen (je nach Ansicht unter „Datenbanken und Speicher“ oder „Build“ als „Firestore Database“), dann **Datenbank erstellen**.
+   - **Nicht** „Data Connect“ bzw. eine SQL-Datenbank wählen. Das Board braucht **Firestore**.
    - Edition, falls gefragt: **Standard**.
+   - Datenbank-ID: **`(default)`** so lassen.
    - Standort: `eur3 (europe-west)` oder `europe-west3 (Frankfurt)`.
-   - Modus: **Im Produktionsmodus starten**. Dann **Erstellen**.
-4. In der Firestore-Datenbank den Tab **Regeln** öffnen. Alles dort löschen, den Inhalt der Datei
+   - Sicherheitsregeln: **Im Produktionsmodus starten** (die Datenbank ist erst einmal gesperrt, das ändern die Regeln in Schritt 4). Dann **Erstellen**.
+4. Danach öffnet sich die Firestore-Seite. Oben gibt es Reiter wie **Daten**, **Regeln**, **Indexe**, **Nutzung**.
+   Im Reiter **Regeln** alles löschen, den Inhalt der Datei
    [`firestore.rules`](firestore.rules) aus diesem Repo einfügen und auf **Veröffentlichen** klicken.
 5. Oben links auf das Zahnrad > **Projekteinstellungen**. Unten bei „Meine Apps“ auf das Symbol **`</>`** (Web) klicken.
    - App-Name: `Weihnachtsboard`. „Firebase Hosting“ **nicht** anhaken. **App registrieren**.
