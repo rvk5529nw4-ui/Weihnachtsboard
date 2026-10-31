@@ -205,6 +205,14 @@ tfoot tr:first-child th, tfoot tr:first-child td { border-top: 1px solid var(--l
 .day-head p { margin: 2px 0 0; font-size: 14px; color: var(--ink-soft); }
 .day-head p:empty { display: none; }
 
+.hl { position: relative; display: block; margin-top: -4px; }
+.hl svg { position: absolute; left: 12px; top: 50%; width: 18px; height: 18px; transform: translateY(-50%); color: var(--accent); pointer-events: none; }
+.hl input { width: 100%; padding: 9px 12px 9px 38px; border: 1.5px dashed var(--line); border-radius: 10px; background: transparent; color: var(--ink); font-size: 15px; font-weight: 600; }
+.hl input::placeholder { color: var(--ink-soft); font-weight: 500; opacity: .8; }
+.hl input:hover:not(:disabled) { border-color: var(--ink-soft); }
+.hl input:focus { border-style: solid; border-color: var(--focus); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 30%, transparent); }
+.hl.filled input { border-style: solid; border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.hl input:disabled { opacity: .55; }
 .meal { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--line); }
 .meal-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 12px; }
 .meal-head h4 { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); }
@@ -706,6 +714,29 @@ var FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
         h('div', { class: 'date' }, h('b', { text: String(d) }), h('small', { text: 'Dez' })),
         h('div', {}, h('h3', { text: wdLong(d) }), h('p', { text: SPECIAL[d] || '' }))));
       var refs = { meals: {} };
+
+      /* Tageshighlight: liegt als eigenes Dokument in "meals" (…_programm), damit die Datenbankregeln gleich bleiben. */
+      var hlKey = dayKey(d) + '_programm';
+      var hlInput = h('input', {
+        type: 'text', id: 'hl-' + d, maxlength: '100', autocomplete: 'off', 'data-w': '1',
+        placeholder: 'Tageshighlight eintragen',
+        'aria-label': 'Tageshighlight am ' + d + '. Dezember'
+      });
+      var hlWrap = h('label', { class: 'hl' }, hlInput);
+      hlWrap.insertAdjacentHTML('afterbegin', '<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M12 1.5l2.6 6.6 7.1.5-5.4 4.6 1.7 6.9L12 16.4 6 20.1l1.7-6.9L2.3 8.6l7.1-.5z"/></svg>');
+      var saveHl = function () {
+        var v = hlInput.value.trim();
+        var cur = (meals[hlKey] && meals[hlKey].highlight) || '';
+        if (v === cur) return;
+        write(function () { return upsert('meals/' + hlKey, { highlight: v }); });
+      };
+      var hlTimer;
+      hlInput.addEventListener('input', function () { clearTimeout(hlTimer); hlTimer = setTimeout(saveHl, 700); });
+      hlInput.addEventListener('blur', function () { clearTimeout(hlTimer); saveHl(); });
+      hlInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') hlInput.blur(); });
+      card.append(hlWrap);
+      refs.hl = { key: hlKey, input: hlInput, wrap: hlWrap };
+
       SLOTS.forEach(function (s) {
         var key = mealKey(d, s.id);
         var count = h('span', { class: 'count' });
@@ -774,6 +805,9 @@ var FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
     DAYS.forEach(function (d) {
       var refs = dayEls[d];
       var open = openFor(d).length;
+      var hlVal = (meals[refs.hl.key] && meals[refs.hl.key].highlight) || '';
+      if (document.activeElement !== refs.hl.input && refs.hl.input.value !== hlVal) refs.hl.input.value = hlVal;
+      refs.hl.wrap.classList.toggle('filled', !!(document.activeElement === refs.hl.input ? refs.hl.input.value.trim() : hlVal));
       SLOTS.forEach(function (s) {
         var m = refs.meals[s.id];
         var cooks = cooksOf(m.key);
