@@ -1,0 +1,14 @@
+rules_version = '2';
+
+// Jeder mit dem Link darf das Board lesen und ändern, ohne Anmeldung.
+// Erlaubt sind nur die vier Bereiche des Boards, und nur bis Ende Januar 2027.
+// Danach ist das Board nur noch lesbar. Zum Verlängern das Datum anpassen.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{coll}/{id} {
+      allow read: if coll in ['meals', 'presence', 'shopping', 'wishes'];
+      allow write: if coll in ['meals', 'presence', 'shopping', 'wishes']
+                   && request.time < timestamp.date(2027, 1, 31);
+    }
+  }
+}

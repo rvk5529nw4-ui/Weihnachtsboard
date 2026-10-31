@@ -1,5 +1,11 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex, nofollow">
 <title>Weihnachtsboard</title>
-<meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Caveat:wght@500;700&family=Figtree:wght@400;500;600;700&display=swap">
@@ -69,7 +75,9 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
 body {
+  margin: 0;
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-body);
@@ -263,6 +271,8 @@ tfoot tr:first-child th, tfoot tr:first-child td { border-top: 1px solid var(--l
   .cell, .opt, .pick, .btn, .edit-cooks { transition: background-color .15s, border-color .15s; }
 }
 </style>
+</head>
+<body>
 
 <main class="wrap">
   <header class="top">
@@ -372,7 +382,11 @@ tfoot tr:first-child th, tfoot tr:first-child td { border-top: 1px solid var(--l
 </main>
 <div class="toast" id="toast" role="status" hidden></div>
 
-<script>
+<script type="module">
+import { firebaseConfig } from './firebase-config.js';
+
+var FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
+
 (function () {
   var YEAR = 2026;
   var DAYS = [23, 24, 25, 26, 27, 28];
@@ -451,17 +465,15 @@ tfoot tr:first-child th, tfoot tr:first-child td { border-top: 1px solid var(--l
     queues[path] = next;
     return next;
   }
+  /* db = { fs, api } sobald Firebase geladen ist. setDoc mit merge führt verschachtelte Felder zusammen. */
   function upsert(path, patch) {
-    return enqueue(path, function () {
-      var ref = db.doc(path);
-      return ref.update(patch).catch(function (e) {
-        if (e && e.code === 'invalid_argument') return ref.set(patch);
-        throw e;
-      });
-    });
+    return enqueue(path, function () { return db.api.setDoc(db.api.doc(db.fs, path), patch, { merge: true }); });
   }
   function remove(path) {
-    return enqueue(path, function () { return db.doc(path).delete(); });
+    return enqueue(path, function () { return db.api.deleteDoc(db.api.doc(db.fs, path)); });
+  }
+  function addTo(coll, data) {
+    return db.api.addDoc(db.api.collection(db.fs, coll), data);
   }
   var toastTimer;
   function toast(msg) {
@@ -471,11 +483,11 @@ tfoot tr:first-child th, tfoot tr:first-child td { border-top: 1px solid var(--l
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { t.hidden = true; }, 3500);
   }
-  var READONLY_MSG = 'Mit diesem Zugang kannst du nur ansehen. Bitte den Link mit Bearbeitungsrecht öffnen, damit du dich eintragen kannst.';
+  var READONLY_MSG = 'Das Board nimmt gerade keine Änderungen an. Die Freigabe der Datenbank ist abgelaufen oder die Regeln wurden geändert.';
   function write(fn) {
-    if (!db || !canWrite) { toast('Du kannst hier nur ansehen.'); return Promise.resolve(); }
+    if (!db || !canWrite) { toast('Gerade kann nichts gespeichert werden.'); return Promise.resolve(); }
     return Promise.resolve().then(fn).catch(function (e) {
-      if (e && e.code === 'invalid_argument') setReadOnly(true, READONLY_MSG);
+      if (e && e.code === 'permission-denied') setReadOnly(true, READONLY_MSG);
       else toast('Das hat nicht geklappt. Bitte versuche es noch einmal.');
     });
   }
@@ -907,7 +919,7 @@ tfoot tr:first-child th, tfoot tr:first-child td { border-top: 1px solid var(--l
       var t = inp.value.trim();
       if (!t) return;
       inp.value = '';
-      write(function () { return db.collection('shopping').add({ text: t, done: false, buyer: '', created: Date.now() }); });
+      write(function () { return addTo('shopping', { text: t, done: false, buyer: '', created: Date.now() }); });
     });
     $('#shop-clear').addEventListener('click', function () {
       var ids = shopDocs.filter(function (i) { return i.data.done; }).map(function (i) { return i.id; });
@@ -922,7 +934,7 @@ tfoot tr:first-child th, tfoot tr:first-child td { border-top: 1px solid var(--l
       if (!who.value) { toast('Wähle zuerst deinen Namen aus.'); who.focus(); return; }
       var w = who.value;
       inp.value = '';
-      write(function () { return db.collection('wishes').add({ text: t, who: w, created: Date.now() }); });
+      write(function () { return addTo('wishes', { text: t, who: w, created: Date.now() }); });
     });
     document.querySelectorAll('.nav button').forEach(function (b) {
       b.addEventListener('click', function () {
@@ -947,10 +959,13 @@ tfoot tr:first-child th, tfoot tr:first-child td { border-top: 1px solid var(--l
     statusEl.textContent = txt[state];
   }
   function subscribe(coll, onData) {
-    db.collection(coll).onSnapshot(function (snap) {
+    db.api.onSnapshot(db.api.collection(db.fs, coll), { includeMetadataChanges: true }, function (snap) {
       onData(snap.docs.map(function (d) { return { id: d.id, data: d.data() || {} }; }));
       if (!snap.metadata.fromCache && !live) { live = true; setConn('live'); }
-    }, function () { setConn('offline'); });
+    }, function (e) {
+      setConn('offline');
+      if (e && e.code === 'permission-denied') setReadOnly(true, 'Die Datenbank lässt sich nicht lesen. Bitte die Regeln in Firebase prüfen.');
+    });
   }
   function toMap(items) {
     var o = {};
@@ -958,11 +973,14 @@ tfoot tr:first-child th, tfoot tr:first-child td { border-top: 1px solid var(--l
     return o;
   }
 
-  function useCap(name) {
-    try {
-      if (window.claude && window.claude.use) return Promise.resolve(window.claude.use(name)).catch(function () { return null; });
-    } catch (e) {}
-    return Promise.resolve(null);
+  function connect() {
+    if (!firebaseConfig || !firebaseConfig.projectId) {
+      return Promise.reject({ code: 'no-config' });
+    }
+    return Promise.all([import(FB + 'firebase-app.js'), import(FB + 'firebase-firestore.js')]).then(function (m) {
+      var app = m[0].initializeApp(firebaseConfig);
+      return { fs: m[1].getFirestore(app), api: m[1] };
+    });
   }
 
   function init() {
@@ -976,25 +994,21 @@ tfoot tr:first-child th, tfoot tr:first-child td { border-top: 1px solid var(--l
     applyDisabled();
     setTimeout(function () { if (!live && statusEl.dataset.state === 'connecting') setConn('slow'); }, 10000);
 
-    Promise.all([useCap('user'), useCap('db')]).then(function (res) {
-      var user = res[0];
-      db = res[1];
-      if (!db) {
-        setConn('offline');
-        setReadOnly(true, 'Das Board lässt sich hier nicht laden. Öffne den Link im Browser und melde dich bei Claude an.');
-        return;
-      }
+    connect().then(function (conn) {
+      db = conn;
       subscribe('meals', function (items) { meals = toMap(items); renderAll(); });
       subscribe('presence', function (items) { presence = toMap(items); renderAll(); });
       subscribe('shopping', function (items) { shopDocs = items; paintShop(); });
       subscribe('wishes', function (items) { wishDocs = items; paintWishes(); });
-      if (user && typeof user.can === 'function') {
-        Promise.resolve(user.can('data.write')).then(function (ok) {
-          if (ok === false) setReadOnly(true, READONLY_MSG);
-        }).catch(function () {});
-      }
+    }, function (e) {
+      setConn('offline');
+      setReadOnly(true, e && e.code === 'no-config'
+        ? 'Das Board ist noch nicht mit der Datenbank verbunden. Trag die Firebase-Daten in firebase-config.js ein.'
+        : 'Das Board konnte keine Verbindung aufbauen. Prüfe deine Internetverbindung und lade die Seite neu.');
     });
   }
   init();
 })();
 </script>
+</body>
+</html>
